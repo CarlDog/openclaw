@@ -12,6 +12,7 @@ import {
 import type { TranscriptEvent } from "../config/sessions/session-accessor.sqlite-contract.js";
 import { resolveSqliteTranscriptArchiveDirectory } from "../config/sessions/session-accessor.sqlite-scope.js";
 import { rewriteSqliteTranscriptEventRowsInTransaction } from "../config/sessions/session-accessor.sqlite-transcript-store.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
   canonicalizePersistedUserMessageMedia,
   hasMeaningfulRetiredMediaCarrier,
@@ -33,6 +34,10 @@ import {
 import { withLegacySessionParticipantsSchema } from "../state/openclaw-agent-participants-migration.js";
 import { OPENCLAW_AGENT_SCHEMA_SQL } from "../state/openclaw-agent-schema.js";
 import { OPENCLAW_SQLITE_BUSY_TIMEOUT_MS } from "../state/openclaw-state-db.js";
+import {
+  createPreMigrationAgentBackup,
+  describePreMigrationSnapshot,
+} from "../state/openclaw-state-pre-migration-backup.js";
 import { VERSION } from "../version.js";
 import { repairGatewayAgentMediaMigrationStartupFailures } from "./gateway-boot-lifecycle.js";
 import {
@@ -57,6 +62,7 @@ import type { MigrationMessages } from "./state-migrations.types.js";
 const PREVIOUS_MEDIA_SCHEMA_VERSION = AGENT_MEDIA_SCHEMA_VERSION - 1;
 const ARCHIVE_TEMP_MARKER = ".media-retirement";
 const MEDIA_MIGRATION_ROW_BATCH_SIZE = 64;
+const mediaMigrationLog = createSubsystemLogger("state/media-migration");
 
 type MediaMigrationDatabase = Pick<
   OpenClawAgentKyselyDatabase,
@@ -415,6 +421,19 @@ function migrateAgentDatabase(params: {
     }
     assertOpenClawAgentSchemaContains(database, params.pathname, schemaSql, schemaMode);
     const mediaSchemaUpgrade = userVersion === PREVIOUS_MEDIA_SCHEMA_VERSION;
+    const preMigrationBackup = mediaSchemaUpgrade
+      ? createPreMigrationAgentBackup(
+          database,
+          params.pathname,
+          params.agentId,
+          userVersion,
+          AGENT_MEDIA_SCHEMA_VERSION,
+          Date.now(),
+        )
+      : undefined;
+    if (preMigrationBackup?.status === "created") {
+      mediaMigrationLog.info(describePreMigrationSnapshot(preMigrationBackup));
+    }
     if (!mediaSchemaUpgrade) {
       const detected = runSqliteDeferredTransactionSync(
         database,
@@ -444,6 +463,14 @@ function migrateAgentDatabase(params: {
         if (currentSourceVersion.dataVersion !== sourceVersion.dataVersion) {
           throw new Error(
             mediaSourceDriftMessage(params.pathname, sourceVersion, currentSourceVersion),
+          );
+        }
+        if (
+          preMigrationBackup?.status === "created" &&
+          readSqliteUserVersion(database) !== preMigrationBackup.fromVersion
+        ) {
+          throw new Error(
+            `Agent database schema changed after its backup was created: ${params.pathname}`,
           );
         }
         const rewrittenSessions = scanTranscriptRows({
