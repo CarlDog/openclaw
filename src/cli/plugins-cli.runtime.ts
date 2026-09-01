@@ -19,6 +19,7 @@ import { emitDiagnosticsTimelineEvent } from "../infra/diagnostics-timeline.js";
 import { withPluginLifecycleLease } from "../plugins/plugin-lifecycle-lease.js";
 import { tracePluginLifecyclePhaseAsync } from "../plugins/plugin-lifecycle-trace.js";
 import { defaultRuntime } from "../runtime.js";
+import { createLazyRuntimeModule as createModuleLoader } from "../shared/lazy-runtime.js";
 import { shortenHomeInString } from "../utils.js";
 import { formatMissingPluginMessage } from "./error-format.js";
 import { ExpectedCliError, formatCliJsonFailure } from "./failure-output.js";
@@ -40,11 +41,6 @@ type PluginInstallActionOptions = {
   pin?: boolean;
   marketplace?: string;
 };
-
-function createModuleLoader<T>(load: () => Promise<T>): () => Promise<T> {
-  let promise: Promise<T> | undefined;
-  return () => (promise ??= load());
-}
 
 const loadPluginsConfigState = createModuleLoader(() => import("../plugins/config-state.js"));
 const loadPluginsStatus = createModuleLoader(() => import("../plugins/status.js"));
