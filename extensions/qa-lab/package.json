@@ -6,7 +6,7 @@
   "type": "module",
   "dependencies": {
     "@copilotkit/aimock": "1.39.0",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@openclaw/crabline": "0.1.17",
     "playwright-core": "1.62.1",
     "semver": "7.8.5",
@@ -21,7 +21,7 @@
     "@openclaw/slack": "workspace:*",
     "@openclaw/whatsapp": "workspace:*",
     "openclaw": "workspace:*",
-    "vite": "8.2.2"
+    "vite": "8.2.4"
   },
   "peerDependencies": {
     "openclaw": ">=2026.8.1"
